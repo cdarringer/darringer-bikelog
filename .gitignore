@@ -1,5 +1,5 @@
 # Ride data files
-rides/
+/rides
 
 # Python
 __pycache__/
