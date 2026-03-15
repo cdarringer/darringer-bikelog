@@ -12,7 +12,11 @@ A simple command-line utility for tracking bike rides.
 
 ## Getting Started
 
-No dependencies required! This utility uses only Python standard library.
+The core utility requires only the Python standard library. The optional S3 publish feature requires `boto3`:
+
+```bash
+pip install -r requirements.txt
+```
 
 ### Using the `brb` Command
 
@@ -78,6 +82,28 @@ brb --list-riders
 - `--bike` (required): Bike used for the ride. Use `--list-bikes` to see available options.
 - `--list-bikes`: Display all available bike options and exit.
 - `--list-riders`: Display all available rider options and exit.
+- `--publish`: Publish CSV files to S3 (only uploads new or changed files).
+
+### Publishing to S3
+
+1. Edit `bikelog.ini` and set your bucket name and region:
+
+```ini
+[s3]
+bucket = your-bucket-name
+region = us-east-1
+prefix = rides/
+```
+
+2. Ensure AWS credentials are configured (via `aws configure`, environment variables, or IAM role).
+
+3. Run the publish command:
+
+```bash
+brb --publish
+```
+
+Only files that are missing from S3 or have changed locally will be uploaded. Files already in sync are skipped.
 
 ### Data Storage
 
