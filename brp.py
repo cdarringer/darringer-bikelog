@@ -87,6 +87,22 @@ def publish_to_s3():
             s3.upload_file(str(local_path), bucket, s3_key)
             uploaded += 1
 
+    # Upload the metrics HTML report if present
+    html_path = Path(CSV_DIR) / "bikelog.html"
+    if html_path.exists():
+        s3_key = prefix + html_path.name
+        local_md5 = _md5_of_file(html_path)
+        if s3_key in s3_etags and s3_etags[s3_key] == local_md5:
+            skipped += 1
+        else:
+            action = "Updating" if s3_key in s3_etags else "Uploading"
+            print(f"  {action} {html_path.name}...")
+            s3.upload_file(str(html_path), bucket, s3_key,
+                           ExtraArgs={'ContentType': 'text/html'})
+            uploaded += 1
+    else:
+        print("  (bikelog.html not found — run brm first to generate the report)")
+
     print(f"Publish complete: {uploaded} uploaded, {skipped} unchanged.")
 
 

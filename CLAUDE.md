@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Does
 
-**darringer-bikelog** is a CLI tool for tracking family bike rides. It logs rides to year-organized CSV files (`data/rides/rides_YYYY.csv`) and can optionally publish them to AWS S3.
+**darringer-bikelog** is a CLI tool for tracking family bike rides. It logs rides to year-organized CSV files (`data/rides/rides_YYYY.csv`), generates an interactive metrics report, and publishes everything to AWS S3.
 
 ## Running the Application
 
@@ -19,20 +19,27 @@ python bikelog.py --date 2026-03-15 --rider "Chris" --distance 20 --bike "Torell
 python bikelog.py --list-bikes
 python bikelog.py --list-riders
 
-# Publish changed CSV files to S3
-python bikelog.py --publish
+# Generate metrics report (opens in browser)
+python brm.py
+
+# Generate for a specific year without opening browser
+python brm.py --year 2024 --no-open
+
+# Publish CSVs + HTML report to S3
+python brp.py
 ```
 
 There are no automated tests. Verification is done manually by inspecting CSV output.
 
 ## Architecture
 
-All logic lives in `bikelog.py` (~327 lines). The `brb` and `brb.py` files are outdated wrappers.
+Three scripts, one concern each: `bikelog.py` (log rides), `brm.py` (generate metrics), `brp.py` (publish to S3). Each has a matching bash wrapper (`brb`, `brm`, `brp`). The `brb.py` file is an outdated stub — ignore it.
 
 **Data flow:**
 1. `main()` parses CLI args (argparse) and routes to a handler
 2. Ride logging: validates rider/bike against `DEFAULT_RIDERS`/`DEFAULT_BIKES`, then `log_ride()` prepends the new record (reverse chronological) to the year's CSV
-3. S3 publish: `publish_to_s3()` reads `bikelog.ini` for bucket/region/prefix, uses MD5 hashing to skip unchanged files
+3. Metrics: `brm.py` loads all CSVs, generates three Plotly charts, writes a self-contained HTML file to `data/rides/bikelog.html`
+4. S3 publish: `brp.py` reads `bikelog.ini` for bucket/region/prefix, uses MD5 hashing to skip unchanged files; uploads both CSVs and `bikelog.html` (with `ContentType: text/html`)
 
 **CSV format:** `Date, Name, Distance, Bike, Comment` — date stored as MM/DD/YYYY, files named `rides_YYYY.csv`
 
@@ -48,5 +55,5 @@ AWS credentials are resolved via `aws configure` or environment variables (not s
 ## Dependencies
 
 ```bash
-pip install -r requirements.txt  # only boto3 (required for --publish)
+pip install -r requirements.txt  # boto3 (S3 publishing), plotly + pandas (metrics)
 ```
