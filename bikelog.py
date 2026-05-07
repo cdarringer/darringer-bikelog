@@ -18,7 +18,7 @@ DEFAULT_BIKES = [
     "Cannondale ST400",
     "Cannondale ST400 2",
     "Fuji",
-    "Giant Bouler Jr.",
+    "Giant Boulder Jr.",
     "Jamis Laser 16",
     "Liv Alight",
     "Liv City",

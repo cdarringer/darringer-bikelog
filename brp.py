@@ -103,6 +103,20 @@ def publish_to_s3():
     else:
         print("  (bikelog.html not found — run brm first to generate the report)")
 
+    # Upload the maintenance CSV if present
+    maintenance_path = Path(__file__).parent / 'data' / 'maintenance' / 'maintenance.csv'
+    if maintenance_path.exists():
+        s3_key = prefix + maintenance_path.name
+        local_md5 = _md5_of_file(maintenance_path)
+        if s3_key in s3_etags and s3_etags[s3_key] == local_md5:
+            skipped += 1
+        else:
+            action = "Updating" if s3_key in s3_etags else "Uploading"
+            print(f"  {action} {maintenance_path.name}...")
+            s3.upload_file(str(maintenance_path), bucket, s3_key,
+                           ExtraArgs={'ContentType': 'text/csv'})
+            uploaded += 1
+
     print(f"Publish complete: {uploaded} uploaded, {skipped} unchanged.")
 
 

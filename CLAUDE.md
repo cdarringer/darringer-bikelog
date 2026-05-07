@@ -27,21 +27,32 @@ python brm.py --year 2024 --no-open
 
 # Publish CSVs + HTML report to S3
 python brp.py
+
+# Log bike maintenance
+python bml.py --bike "Cannondale ST400" --activity "Tune-up" --cost 75.00 --shop "Bicycles NYC"
+python bml.py --date 2026-04-15 --bike "Torelli" --activity "New chain" --cost 35.00
+
+# List maintenance records
+python bml.py --list
+python bml.py --list --bike "Cannondale ST400" --limit 50
 ```
 
 There are no automated tests. Verification is done manually by inspecting CSV output.
 
 ## Architecture
 
-Three scripts, one concern each: `bikelog.py` (log rides), `brm.py` (generate metrics), `brp.py` (publish to S3). Each has a matching bash wrapper (`brb`, `brm`, `brp`). The `brb.py` file is an outdated stub — ignore it.
+Four scripts, one concern each: `bikelog.py` (log rides), `brm.py` (generate metrics), `brp.py` (publish to S3), `bml.py` (log maintenance). Each has a matching bash wrapper (`brb`, `brm`, `brp`, `bml`). The `brb.py` file is an outdated stub — ignore it.
 
 **Data flow:**
 1. `main()` parses CLI args (argparse) and routes to a handler
 2. Ride logging: validates rider/bike against `DEFAULT_RIDERS`/`DEFAULT_BIKES`, then `log_ride()` prepends the new record (reverse chronological) to the year's CSV
 3. Metrics: `brm.py` loads all CSVs, generates three Plotly charts, writes a self-contained HTML file to `data/rides/bikelog.html`
-4. S3 publish: `brp.py` reads `bikelog.ini` for bucket/region/prefix, uses MD5 hashing to skip unchanged files; uploads both CSVs and `bikelog.html` (with `ContentType: text/html`)
+4. S3 publish: `brp.py` reads `bikelog.ini` for bucket/region/prefix, uses MD5 hashing to skip unchanged files; uploads both CSVs, `bikelog.html`, and `maintenance.csv`
+5. Maintenance logging: `bml.py` validates the bike name, auto-calculates lifetime mileage from rides CSVs as of the log date, and prepends the record to `data/maintenance/maintenance.csv`
 
-**CSV format:** `Date, Name, Distance, Bike, Comment` — date stored as MM/DD/YYYY, files named `rides_YYYY.csv`
+**Rides CSV format:** `Date, Name, Distance, Bike, Comment` — date stored as MM/DD/YYYY, files named `rides_YYYY.csv`
+
+**Maintenance CSV format:** `Date, Bike, Activity, Cost, Shop, Mileage_At_Service` — single file `data/maintenance/maintenance.csv`, newest first
 
 **S3 config** (`bikelog.ini`):
 ```ini
