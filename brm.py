@@ -29,8 +29,6 @@ def load_all_rides():
     dfs = []
     for path in csv_files:
         df = pd.read_csv(path)
-        # Normalize column name inconsistency across historical files
-        df.rename(columns={'Comments': 'Comment'}, inplace=True)
         dfs.append(df)
 
     df = pd.concat(dfs, ignore_index=True)
