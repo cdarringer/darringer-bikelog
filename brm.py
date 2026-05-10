@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 import plotly.offline
 
 CSV_DIR = "/Users/chris/git/darringer-bikelog/data/rides"
+MAINTENANCE_CSV = "/Users/chris/git/darringer-bikelog/data/maintenance/maintenance.csv"
 OUTPUT_HTML = os.path.join(CSV_DIR, "bikelog.html")
 ACTIVE_RIDERS = ["Chris", "Sally", "Theo", "Lucja", "Frances"]
 
@@ -41,6 +42,102 @@ def load_all_rides():
 
     df['Year'] = df['Date'].dt.year.astype(int)
     return df
+
+
+def load_maintenance():
+    """Load maintenance CSV into a DataFrame."""
+    path = Path(MAINTENANCE_CSV)
+    if not path.exists():
+        return pd.DataFrame(columns=['Date', 'Bike', 'Activity', 'Cost', 'Shop'])
+    df = pd.read_csv(path)
+    df['Date'] = pd.to_datetime(df['Date'], format='%m/%d/%Y', errors='coerce')
+    df = df.dropna(subset=['Date'])
+    df['Cost'] = pd.to_numeric(df['Cost'], errors='coerce').fillna(0)
+    return df
+
+
+def build_cost_by_bike_chart(mdf):
+    """Horizontal bar chart of total maintenance cost per bike."""
+    totals = mdf.groupby('Bike')['Cost'].sum().sort_values(ascending=True)
+    totals = totals[totals > 0]
+
+    fig = go.Figure(go.Bar(
+        x=totals.values,
+        y=totals.index,
+        orientation='h',
+        text=[f'${v:,.0f}' for v in totals.values],
+        textposition='outside',
+        marker_color='#e07b39',
+        hovertemplate='%{y}: $%{x:,.0f}<extra></extra>'
+    ))
+    fig.update_layout(
+        title='Total Maintenance Cost by Bike',
+        xaxis_title='Total Cost ($)',
+        xaxis=dict(tickprefix='$'),
+        margin=dict(l=160, r=80),
+    )
+    return fig
+
+
+def build_cumulative_cost_chart(mdf):
+    """Cumulative maintenance cost over time, one line per bike."""
+    bikes_with_cost = mdf.groupby('Bike')['Cost'].sum()
+    bikes_with_cost = bikes_with_cost[bikes_with_cost > 0].index.tolist()
+
+    fig = go.Figure()
+    for bike in sorted(bikes_with_cost):
+        bike_df = mdf[mdf['Bike'] == bike].sort_values('Date')
+        cumulative = bike_df['Cost'].cumsum()
+        fig.add_trace(go.Scatter(
+            x=bike_df['Date'],
+            y=cumulative,
+            mode='lines+markers',
+            name=bike,
+            hovertemplate='%{x|%b %d, %Y}: $%{y:,.0f}<extra>' + bike + '</extra>'
+        ))
+
+    fig.update_layout(
+        title='Cumulative Maintenance Cost by Bike',
+        xaxis_title='Date',
+        yaxis_title='Cumulative Cost ($)',
+        yaxis=dict(tickprefix='$'),
+        hovermode='x unified',
+        legend_title='Bike'
+    )
+    return fig
+
+
+def build_cost_per_mile_chart(mdf, rides_df):
+    """Bar chart of maintenance cost per tracked mile, per bike."""
+    total_cost = mdf.groupby('Bike')['Cost'].sum()
+    total_cost = total_cost[total_cost > 0]
+    total_miles = rides_df.groupby('Bike')['Distance'].sum()
+
+    common = total_cost.index.intersection(total_miles.index)
+    common = [b for b in common if total_miles[b] > 0]
+
+    cpm = pd.Series(
+        {bike: total_cost[bike] / total_miles[bike] for bike in common}
+    ).sort_values(ascending=False)
+
+    fig = go.Figure(go.Bar(
+        x=cpm.index,
+        y=cpm.values,
+        text=[f'${v:.2f}' for v in cpm.values],
+        textposition='outside',
+        marker_color='#e07b39',
+        hovertemplate='%{x}: $%{y:.2f}/mi<extra></extra>'
+    ))
+    fig.update_layout(
+        title='Maintenance Cost per Mile by Bike<br>'
+              '<sup>Based on miles tracked in ride log only — lifetime mileage may be higher for some bikes</sup>',
+        xaxis_title='Bike',
+        yaxis_title='Cost per Mile ($)',
+        yaxis=dict(tickprefix='$'),
+        xaxis_tickangle=-30,
+        margin=dict(t=80)
+    )
+    return fig
 
 
 def build_cumulative_chart(df, year):
@@ -270,20 +367,29 @@ def build_yoy_table(df):
 
 
 def build_report(year):
-    """Generate a self-contained HTML report with all three charts."""
+    """Generate a self-contained HTML report with ride and cost-of-ownership charts."""
     print("Loading ride data...")
     df = load_all_rides()
+
+    print("Loading maintenance data...")
+    mdf = load_maintenance()
 
     print("Building charts...")
     cumulative_fig = build_cumulative_chart(df, year)
     yoy_fig = build_yoy_table(df)
     bike_fig = build_bike_chart(df)
+    cost_by_bike_fig = build_cost_by_bike_chart(mdf)
+    cumulative_cost_fig = build_cumulative_cost_chart(mdf)
+    cost_per_mile_fig = build_cost_per_mile_chart(mdf, df)
 
     # Embed Plotly JS once; each chart div uses include_plotlyjs=False
     plotlyjs = plotly.offline.get_plotlyjs()
     cumulative_div = cumulative_fig.to_html(full_html=False, include_plotlyjs=False)
     yoy_div = yoy_fig.to_html(full_html=False, include_plotlyjs=False)
     bike_div = bike_fig.to_html(full_html=False, include_plotlyjs=False)
+    cost_by_bike_div = cost_by_bike_fig.to_html(full_html=False, include_plotlyjs=False)
+    cumulative_cost_div = cumulative_cost_fig.to_html(full_html=False, include_plotlyjs=False)
+    cost_per_mile_div = cost_per_mile_fig.to_html(full_html=False, include_plotlyjs=False)
 
     timestamp = datetime.now().strftime('%B %d, %Y at %I:%M %p')
 
@@ -296,17 +402,51 @@ def build_report(year):
   <style>
     body {{ font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 1rem 2rem; background: #fafafa; }}
     h1 {{ color: #333; margin-bottom: 0.25rem; }}
-    .generated {{ color: #999; font-size: 0.85rem; margin-bottom: 2rem; }}
+    .generated {{ color: #999; font-size: 0.85rem; margin-bottom: 1.5rem; }}
     .chart {{ background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 0.5rem; margin-bottom: 2rem; }}
+    .tab-bar {{ display: flex; border-bottom: 2px solid #4a7fc1; margin-bottom: 1.5rem; }}
+    .tab-btn {{
+      padding: 0.55rem 1.4rem; cursor: pointer; font-size: 0.95rem; color: #555;
+      background: #eef2f8; border: 1px solid #ccd6e8; border-bottom: none;
+      border-radius: 6px 6px 0 0; margin-right: 4px; margin-bottom: -2px;
+    }}
+    .tab-btn:hover {{ background: #dde6f5; }}
+    .tab-btn.active {{ background: #4a7fc1; color: white; border-color: #4a7fc1; }}
+    .tab-content {{ display: none; }}
+    .tab-content.active {{ display: block; }}
   </style>
   <script>{plotlyjs}</script>
 </head>
 <body>
   <h1>Darringer Family Bike Log — {year}</h1>
   <p class="generated">Generated {timestamp}</p>
-  <div class="chart">{cumulative_div}</div>
-  <div class="chart">{yoy_div}</div>
-  <div class="chart">{bike_div}</div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab(event, 'rides')">Ride Metrics</button>
+    <button class="tab-btn" onclick="switchTab(event, 'costs')">Cost of Ownership</button>
+  </div>
+
+  <div id="rides" class="tab-content active">
+    <div class="chart">{cumulative_div}</div>
+    <div class="chart">{yoy_div}</div>
+    <div class="chart">{bike_div}</div>
+  </div>
+
+  <div id="costs" class="tab-content">
+    <div class="chart">{cost_by_bike_div}</div>
+    <div class="chart">{cumulative_cost_div}</div>
+    <div class="chart">{cost_per_mile_div}</div>
+  </div>
+
+  <script>
+  function switchTab(event, tabId) {{
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(tabId).classList.add('active');
+    event.currentTarget.classList.add('active');
+    window.dispatchEvent(new Event('resize'));
+  }}
+  </script>
 </body>
 </html>"""
     return html
