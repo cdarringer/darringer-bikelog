@@ -5,9 +5,7 @@ import argparse
 import csv
 import os
 from datetime import datetime
-from pathlib import Path
 
-RIDES_DIR = "/Users/chris/git/darringer-bikelog/data/rides"
 MAINTENANCE_DIR = "/Users/chris/git/darringer-bikelog/data/maintenance"
 MAINTENANCE_CSV = os.path.join(MAINTENANCE_DIR, "maintenance.csv")
 
@@ -27,33 +25,7 @@ DEFAULT_BIKES = [
     "Torelli 2"
 ]
 
-CSV_COLUMNS = ['Date', 'Bike', 'Activity', 'Cost', 'Shop', 'Mileage_At_Service']
-
-
-def get_bike_mileage(bike, as_of_date):
-    """Sum all tracked miles for a bike up to and including as_of_date."""
-    if isinstance(as_of_date, datetime):
-        cutoff = as_of_date
-    else:
-        cutoff = datetime.strptime(as_of_date, '%Y-%m-%d')
-
-    total = 0.0
-    for path in sorted(Path(RIDES_DIR).glob('rides_[0-9]*.csv')):
-        with open(path, 'r', newline='') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if row.get('Bike', '').strip() != bike:
-                    continue
-                try:
-                    row_date = datetime.strptime(row['Date'].strip(), '%m/%d/%Y')
-                except ValueError:
-                    continue
-                if row_date <= cutoff:
-                    try:
-                        total += float(row['Distance'])
-                    except ValueError:
-                        pass
-    return total
+CSV_COLUMNS = ['Date', 'Bike', 'Activity', 'Cost', 'Shop']
 
 
 def ensure_csv_exists():
@@ -72,9 +44,7 @@ def log_maintenance(date, bike, activity, cost, shop):
         date_obj = datetime.strptime(date, '%Y-%m-%d')
 
     date_str = date_obj.strftime('%-m/%-d/%Y')
-    mileage = get_bike_mileage(bike, date_obj)
-
-    new_record = [date_str, bike, activity, f'{cost:.2f}', shop, f'{mileage:.1f}']
+    new_record = [date_str, bike, activity, f'{cost:.2f}', shop]
 
     existing = []
     if os.path.exists(MAINTENANCE_CSV):
@@ -97,7 +67,6 @@ def log_maintenance(date, bike, activity, cost, shop):
     print(f"  Cost: ${cost:.2f}")
     if shop:
         print(f"  Shop: {shop}")
-    print(f"  Mileage at service: {mileage:,.1f} miles")
     print(f"  Saved to {MAINTENANCE_CSV}")
 
 
@@ -118,7 +87,7 @@ def list_maintenance(bike=None, limit=20):
         return
 
     shown = rows[:limit]
-    header = f"{'Date':<12} {'Bike':<22} {'Activity':<42} {'Cost':>8} {'Miles':>8}"
+    header = f"{'Date':<12} {'Bike':<22} {'Activity':<50} {'Cost':>8}"
     print(f"\n{header}")
     print("-" * len(header))
     for r in shown:
@@ -126,14 +95,10 @@ def list_maintenance(bike=None, limit=20):
             cost_str = f"${float(r['Cost']):.2f}" if r['Cost'] else ''
         except ValueError:
             cost_str = ''
-        try:
-            miles_str = f"{float(r['Mileage_At_Service']):,.0f}" if r['Mileage_At_Service'] else ''
-        except ValueError:
-            miles_str = ''
         activity = r['Activity']
-        if len(activity) > 41:
-            activity = activity[:39] + '…'
-        print(f"{r['Date']:<12} {r['Bike']:<22} {activity:<42} {cost_str:>8} {miles_str:>8}")
+        if len(activity) > 49:
+            activity = activity[:47] + '…'
+        print(f"{r['Date']:<12} {r['Bike']:<22} {activity:<50} {cost_str:>8}")
 
     if len(rows) > limit:
         print(f"\n  ({len(rows) - limit} more — use --limit to see more)")

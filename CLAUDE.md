@@ -52,7 +52,7 @@ Four scripts, one concern each: `bikelog.py` (log rides), `brm.py` (generate met
 
 **Rides CSV format:** `Date, Name, Distance, Bike, Comment` — date stored as MM/DD/YYYY, files named `rides_YYYY.csv`
 
-**Maintenance CSV format:** `Date, Bike, Activity, Cost, Shop, Mileage_At_Service` — single file `data/maintenance/maintenance.csv`, newest first
+**Maintenance CSV format:** `Date, Bike, Activity, Cost, Shop` — single file `data/maintenance/maintenance.csv`, newest first; mileage is derived on demand from the rides CSVs
 
 **S3 config** (`bikelog.ini`):
 ```ini
