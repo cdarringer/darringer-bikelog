@@ -74,7 +74,8 @@ def build_cost_by_bike_chart(mdf):
         title='Total Maintenance Cost by Bike',
         xaxis_title='Total Cost ($)',
         xaxis=dict(tickprefix='$'),
-        margin=dict(l=160, r=80),
+        yaxis=dict(automargin=True),
+        margin=dict(r=80),
     )
     return fig
 
@@ -382,14 +383,16 @@ def build_report(year):
     cumulative_cost_fig = build_cumulative_cost_chart(mdf)
     cost_per_mile_fig = build_cost_per_mile_chart(mdf, df)
 
-    # Embed Plotly JS once; each chart div uses include_plotlyjs=False
+    # Embed Plotly JS once; each chart div uses include_plotlyjs=False.
+    # responsive=True makes charts fill their container width on any screen size.
     plotlyjs = plotly.offline.get_plotlyjs()
-    cumulative_div = cumulative_fig.to_html(full_html=False, include_plotlyjs=False)
-    yoy_div = yoy_fig.to_html(full_html=False, include_plotlyjs=False)
-    bike_div = bike_fig.to_html(full_html=False, include_plotlyjs=False)
-    cost_by_bike_div = cost_by_bike_fig.to_html(full_html=False, include_plotlyjs=False)
-    cumulative_cost_div = cumulative_cost_fig.to_html(full_html=False, include_plotlyjs=False)
-    cost_per_mile_div = cost_per_mile_fig.to_html(full_html=False, include_plotlyjs=False)
+    _html_args = dict(full_html=False, include_plotlyjs=False, config={'responsive': True})
+    cumulative_div = cumulative_fig.to_html(**_html_args)
+    yoy_div = yoy_fig.to_html(**_html_args)
+    bike_div = bike_fig.to_html(**_html_args)
+    cost_by_bike_div = cost_by_bike_fig.to_html(**_html_args)
+    cumulative_cost_div = cumulative_cost_fig.to_html(**_html_args)
+    cost_per_mile_div = cost_per_mile_fig.to_html(**_html_args)
 
     timestamp = datetime.now().strftime('%B %d, %Y at %I:%M %p')
 
@@ -400,20 +403,25 @@ def build_report(year):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Darringer Bike Log — {year} Metrics</title>
   <style>
-    body {{ font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 1rem 2rem; background: #fafafa; }}
-    h1 {{ color: #333; margin-bottom: 0.25rem; }}
+    body {{ font-family: sans-serif; max-width: 1200px; margin: 0 auto; padding: 1rem 2rem; background: #fafafa; overflow-x: hidden; }}
+    h1 {{ color: #333; margin-bottom: 0.25rem; font-size: clamp(1.2rem, 4vw, 1.8rem); }}
     .generated {{ color: #999; font-size: 0.85rem; margin-bottom: 1.5rem; }}
-    .chart {{ background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 0.5rem; margin-bottom: 2rem; }}
-    .tab-bar {{ display: flex; border-bottom: 2px solid #4a7fc1; margin-bottom: 1.5rem; }}
+    .chart {{ background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); padding: 0.5rem; margin-bottom: 1.5rem; }}
+    .tab-bar {{ display: flex; border-bottom: 2px solid #4a7fc1; margin-bottom: 1.5rem; flex-wrap: wrap; }}
     .tab-btn {{
-      padding: 0.55rem 1.4rem; cursor: pointer; font-size: 0.95rem; color: #555;
+      padding: 0.65rem 1.4rem; cursor: pointer; font-size: 0.95rem; color: #555;
       background: #eef2f8; border: 1px solid #ccd6e8; border-bottom: none;
       border-radius: 6px 6px 0 0; margin-right: 4px; margin-bottom: -2px;
+      min-height: 44px;
     }}
     .tab-btn:hover {{ background: #dde6f5; }}
     .tab-btn.active {{ background: #4a7fc1; color: white; border-color: #4a7fc1; }}
     .tab-content {{ display: none; }}
     .tab-content.active {{ display: block; }}
+    @media (max-width: 600px) {{
+      body {{ padding: 0.75rem 0.75rem; }}
+      .tab-btn {{ padding: 0.65rem 1rem; font-size: 0.9rem; }}
+    }}
   </style>
   <script>{plotlyjs}</script>
 </head>
