@@ -18,8 +18,6 @@ import plotly.offline
 CSV_DIR = "/Users/chris/git/darringer-bikelog/data/rides"
 MAINTENANCE_CSV = "/Users/chris/git/darringer-bikelog/data/maintenance/maintenance.csv"
 OUTPUT_HTML = os.path.join(CSV_DIR, "bikelog.html")
-ACTIVE_RIDERS = ["Chris", "Sally", "Theo", "Lucja", "Frances"]
-
 
 def load_all_rides():
     """Load and concatenate all year CSV files into a single DataFrame."""
@@ -144,11 +142,14 @@ def build_cost_per_mile_chart(mdf, rides_df):
 def build_cumulative_chart(df, year):
     """Cumulative mileage line chart per rider — toggleable between current year and all time."""
     year_df = df[df['Year'] == year].copy()
+    year_totals = year_df.groupby('Name')['Distance'].sum()
+    year_riders = year_totals.sort_values(ascending=False).index.tolist()
+    all_riders = sorted(df['Name'].unique().tolist())
     today = datetime.now().date()
     fig = go.Figure()
 
     # Current year traces (visible by default)
-    for rider in ACTIVE_RIDERS:
+    for rider in year_riders:
         rider_df = year_df[year_df['Name'] == rider].sort_values('Date')
         if rider_df.empty:
             continue
@@ -166,7 +167,7 @@ def build_cumulative_chart(df, year):
     n_current = len(fig.data)
 
     # All-time traces (hidden by default)
-    for rider in ACTIVE_RIDERS:
+    for rider in all_riders:
         rider_df = df[df['Name'] == rider].sort_values('Date')
         if rider_df.empty:
             continue
@@ -233,21 +234,34 @@ def build_cumulative_chart(df, year):
 
 def build_bike_chart(df):
     """Stacked bar chart of all-time mileage by bike, broken down by rider."""
-    year_df = df[df['Name'].isin(ACTIVE_RIDERS)].copy()
-    pivot = year_df.groupby(['Bike', 'Name'])['Distance'].sum().reset_index()
+    pivot = df.groupby(['Bike', 'Name'])['Distance'].sum().reset_index()
+
+    # Riders with < 100 miles on a given bike are bucketed as "Other"
+    pivot['DisplayName'] = pivot.apply(
+        lambda row: row['Name'] if row['Distance'] >= 100 else 'Other', axis=1
+    )
+    pivot_adj = pivot.groupby(['Bike', 'DisplayName'])['Distance'].sum().reset_index()
 
     # Sort bikes by total mileage descending
     bike_order = (
-        pivot.groupby('Bike')['Distance'].sum()
+        pivot_adj.groupby('Bike')['Distance'].sum()
         .sort_values(ascending=False)
         .index.tolist()
     )
 
-    totals = pivot.groupby('Bike')['Distance'].sum()
+    totals = pivot_adj.groupby('Bike')['Distance'].sum()
+    rider_totals = (
+        pivot[pivot['Distance'] >= 100]
+        .groupby('Name')['Distance'].sum()
+        .sort_values(ascending=False)
+    )
+    named_riders = rider_totals.index.tolist()
+    has_other = 'Other' in pivot_adj['DisplayName'].values
+    display_riders = named_riders + (['Other'] if has_other else [])
 
     fig = go.Figure()
-    for rider in ACTIVE_RIDERS:
-        rider_data = pivot[pivot['Name'] == rider].set_index('Bike')
+    for rider in display_riders:
+        rider_data = pivot_adj[pivot_adj['DisplayName'] == rider].set_index('Bike')
         y_vals = [rider_data.loc[bike, 'Distance'] if bike in rider_data.index else 0
                   for bike in bike_order]
         if sum(y_vals) == 0:
@@ -300,17 +314,22 @@ def _pct_to_color(pct):
 
 def build_yoy_table(df):
     """Table of annual mileage per rider with YoY% heatmap coloring."""
-    active_df = df[df['Name'].isin(ACTIVE_RIDERS)]
     # pivot: index=Year, columns=Rider
     yearly = (
-        active_df.groupby(['Year', 'Name'])['Distance']
+        df.groupby(['Year', 'Name'])['Distance']
         .sum()
         .unstack(fill_value=0)
     )
     years = sorted(yearly.index.tolist())
 
-    # Only include riders who have any data
-    riders = [r for r in ACTIVE_RIDERS if r in yearly.columns and yearly[r].sum() > 0]
+    # Only include riders who have rides in the current year, sorted by current-year miles desc
+    current_year = df['Year'].max()
+    riders_this_year = set(df[df['Year'] == current_year]['Name'].unique())
+    riders = sorted(
+        [r for r in yearly.columns if r in riders_this_year],
+        key=lambda r: yearly.loc[current_year, r] if current_year in yearly.index else 0,
+        reverse=True
+    )
 
     # Build column data: one column per year, one row per rider
     year_cell_values = []   # list of lists (one per year column)
@@ -359,10 +378,12 @@ def build_yoy_table(df):
         )
     )])
 
+    table_height = 32 + n_riders * 36 + 130  # header row + data rows + title/margin space
     fig.update_layout(
         title='Annual Miles by Rider — All Years<br>'
               '<sup>Cell color: green = improvement vs prior year, red = decline (capped at ±30%)</sup>',
-        margin=dict(t=80)
+        height=table_height,
+        margin=dict(t=80, b=20)
     )
     return fig
 
